@@ -6,6 +6,8 @@ import shlex
 import subprocess
 import sys
 
+import updateBD as bd
+
 """
 Columnes a guardar en la base de dades
 
@@ -44,8 +46,102 @@ reads_RV_referencia (?)
 reads_RV_observat (?)
 VAF
 filtre_variant_caller (o manual)
-info_del_run (?)
+info_del_run (log amb comentaris que puga escriure l'usuari)
+
+----------
+Taula mostra
+----------
+id (identificador de la mostra)
+[...] (es podrien afegir mes dades segons vulguen els usuaris)
 """
+
+def summaryPredictors(keys, values) :
+    deleterious = 0
+    tolerated = 0
+    unknown = 0
+    temp = {}
+    it = 0
+    idx = keys.index("SIFT_pred")
+    if values[idx] == 'D' :
+        deleterious += 1
+    elif values[idx] == 'T' :
+        tolerated += 1
+    else :
+        unknown += 1
+    idx = keys.index("Polyphen2_HDIV_pred")
+    if values[idx] == 'D' or values[idx] == 'P' :
+        deleterious += 1
+    elif values[idx] == 'B' :
+        tolerated += 1
+    else :
+        unknown += 1
+    idx = keys.index("Polyphen2_HVAR_pred")
+    if values[idx] == 'D' or values[idx] == 'P' :
+        deleterious += 1
+    elif values[idx] == 'B' :
+        tolerated += 1
+    else :
+        unknown += 1
+    idx = keys.index("LRT_pred")
+    if values[idx] == 'D' :
+        deleterious += 1
+    elif values[idx] == 'N' :
+        tolerated += 1
+    else :
+        unknown += 1
+    idx = keys.index("MutationTaster_pred")
+    if values[idx] == 'A' or values[idx] == 'D' :
+        deleterious += 1
+    elif values[idx] == 'N' or values[idx] == 'P' :
+        tolerated += 1
+    else :
+        unknown += 1
+    idx = keys.index("MutationAssessor_pred")
+    if values[idx] == 'H' or values[idx] == 'M' :
+        deleterious += 1
+    elif values[idx] == 'L' or values[idx] == 'N' :
+        tolerated += 1
+    else :
+        unknown += 1
+    idx = keys.index("FATHMM_pred")
+    if values[idx] == 'D' :
+        deleterious += 1
+    elif values[idx] == 'T' :
+        tolerated += 1
+    else :
+        unknown += 1
+    idx = keys.index("PROVEAN_pred")
+    if values[idx] == 'D' :
+        deleterious += 1
+    elif values[idx] == 'T' :
+        tolerated += 1
+    else :
+        unknown += 1
+    idx = keys.index("MetaSVM_pred")
+    if values[idx] == 'D' :
+        deleterious += 1
+    elif values[idx] == 'T' :
+        tolerated += 1
+    else :
+        unknown += 1
+    idx = keys.index("MetaLR_pred")
+    if values[idx] == 'D' :
+        deleterious += 1
+    elif values[idx] == 'T' :
+        tolerated += 1
+    else :
+        unknown += 1
+    idx = keys.index("DANN_score")
+    if values[idx] == "NA" or values[idx] == "." :
+        unknown += 1
+    elif float(values[idx]) > 0.9 :
+        deleterious += 1
+    elif float(values[idx]) <= 0.9 :
+        tolerated += 1
+
+    return "{}D, {}T, {}U".format(deleterious, tolerated, unknown)
+
+
 
 def getPopMax(keys, values) :
     """Buscar la poblacion que tiene la MAF mayor y devolver el valor, junto con la poblacion reportada"""
@@ -67,6 +163,31 @@ def getPopMax(keys, values) :
 
     return pop, maf
 
+def filtrarVariante(type, exoType, maf, vaf) :
+    filtro = "raw_candidate"
+    # Comprobar si la variante es codificante
+    if type == "exonic" or type == "splicing" :
+        if exoType != "synonymous SNV" :
+            filtro = "consequence"
+    # Comprobar si tiene una MAF alta y si tiene una VAF baja
+    if filtro == "consequence" :
+        if maf == "NA" :
+            auxMaf = -1
+        else :
+            auxMaf = float(maf)
+        if auxMaf >= 0.01 :
+            filtro = "population_SNP"
+        else :
+            try :
+                if float(vaf) < 5 :
+                    filtro = "low_VAF"
+                else :
+                    filtro = "candidate_variant"
+            except ValueError :
+                print("Invalid VAF: {}".format(vaf))
+    return filtro
+
+
 def fillALLdb(filename) :
     """
     # Columnas si el archivo es tipo filtro0.hg19_mutianno.txt
@@ -77,7 +198,17 @@ def fillALLdb(filename) :
     "AF_nfe", "AF_fin", "AF_asj", "AF_oth", "non_topmed_AF_popmax", "non_neuro_AF_popmax", "non_cancer_AF_popmax", "controls_AF_popmax", "AF", "AF_popmax",
     "AF_male", "AF_female", "AF_raw", "AF_afr", "AF_sas", "AF_amr", "AF_eas", "AF_nfe", "AF_fin", "AF_asj", "AF_oth", "non_topmed_AF_popmax", "non_neuro_AF_popmax",
     "non_cancer_AF_popmax", "controls_AF_popmax", "esp6500siv2_all", "esp6500siv2_ea", "esp6500siv2_aa"]
+    pred_keys = ["SIFT_pred", "Polyphen2_HDIV_pred", "Polyphen2_HVAR_pred", "LRT_pred", "MutationTaster_pred", "MutationAssessor_pred", "FATHMM_pred", "PROVEAN_pred",
+    "MetaSVM_pred", "MetaLR_pred", "DANN_score"]
     header = []
+    mostra = ""
+    files = os.listdir(os.path.dirname(filename))
+    backup = ""
+    for f in files :
+        if f.endswith(".xlsx") :
+            mostra = f.replace(".xlsx", "")
+            break
+
     with open(filename, "r") as fi :
         for l in fi :
             aux = l.strip().split("\t")
@@ -101,7 +232,14 @@ def fillALLdb(filename) :
                 if temp != "NA" :
                     # ANNOVAR reporta la informacion sobre los distintos transcritos separados por comas. Recoger el primero, suponiendo que es el canonico
                     transcritos = temp.split(",")[0]
-                    genAux, transAux, exon, cdna, prot = transcritos.split(":")
+                    try :
+                        genAux, transAux, exon, cdna, prot = transcritos.split(":")
+                    except ValueError :
+                        genAux = "NA"
+                        transAux = "NA"
+                        exon = "NA"
+                        cdna = "NA"
+                        prot = "NA"
                 else :
                     genAux = transAux = exon = cdna = prot = "NA"
                 dbsnp = aux[header.index("avsnp150")]
@@ -110,14 +248,46 @@ def fillALLdb(filename) :
                 if cosmic != "NA" :
                     temp = cosmic.split(";")[0]
                     cosmic = temp.split(",")[0].strip("ID=") # Recoger el primer identificador de COSMIC que reporta ANNOVAR
+
+                # Guardar el resumen de predictores
+                pred_vals = []
+                for p in pred_keys :
+                    pred_vals.append(aux[header.index(p)])
+                sumPreds = summaryPredictors(pred_keys, pred_vals)
+
                 # Guardar las MAFs en una lista para sacar la mayor
                 pop_vals = []
                 for p in pop_keys :
                     pop_vals.append(aux[header.index(p)])
 
                 popMax, maxMaf = getPopMax(pop_keys, pop_vals)
-                # TODO: Continuar afegint informacio de la taula run
-    return ""
+                anotacions = ""
+
+                # Como las columnas del vcf no estan anotadas el filtro0.hg19_mutianno.txt, se usa el valor directamente
+                filter = aux[144]
+                format = aux[146].split(":")
+                vals = aux[147].split(":")
+                # Comprobar que los numeros de columna son correctos
+                if format[0] == "GT" :
+                    covRef = vals[format.index("RD")]
+                    covAlt = vals[format.index("AD")]
+                    refFw = vals[format.index("RDF")]
+                    refRv = vals[format.index("RDR")]
+                    altFw = vals[format.index("ADF")]
+                    altRv = vals[format.index("ADR")]
+                    vaf = vals[format.index("FREQ")].replace("%", "").replace(",", ".")
+                    if filter == "PASS" :
+                        filter = filtrarVariante(typ, exo, maxMaf, vaf)
+                    infoRun = ""
+                    print("{}\t{}\t{}\t{}\t{}".format(aux[0:6], aux[8], aux[147], maxMaf,filter))
+                else :
+                    print("ERROR: Invalid column found when getting the FORMAT VCF data. Please, change that value in 'format = aux[146].split(...' line")
+                    sys.exit()
+
+                ## TODO: Comprovar si la variant existeix en la base de dades. Recollir l'identificador de la variant per la taula run
+                ## TODO: Crear les consultes a la base de dades
+
+    return backup
 
 
 def fillVHdb(filename) :
