@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
+import mysql.connector
 import os
 import shlex
 import subprocess
@@ -208,85 +209,134 @@ def fillALLdb(filename) :
         if f.endswith(".xlsx") :
             mostra = f.replace(".xlsx", "")
             break
+    # Comprobar si la muestra ya se ha guardado en la base de datos previamente
+    dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="ALLvar")
+    with dbcon as con :
+        query = "SELECT id FROM mostra WHERE id='{}'".format(mostra);
+        with con.cursor() as cur :
+            cur.execute(query)
+            res = cur.fetchall()
+    if len(res) > 0 :
+        print("WARNING: Sample {} already stored in the database. Variants will not be stored".format(mostra))
+    else :
+        # Guardar la muestra en la base de datos
+        dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="ALLvar")
+        with dbcon as con :
+            query = "INSERT INTO mostra(id) VALUES('{}')".format(mostra);
+            with con.cursor() as cur :
+                cur.execute(query)
+                con.commit()
+                backup = backup + query + ";\n"
 
-    with open(filename, "r") as fi :
-        for l in fi :
-            aux = l.strip().split("\t")
-            if len(header) == 0 :
-                header = aux
-                # Buscar si todas las columnas para la base de datos tiene el nombre esperado
-                if "Chr" not in header :
-                    raise ValueError("ERROR: Chromosome column not found")
-            else :
-                chr = aux[header.index("Chr")]
-                start = aux[header.index("Start")]
-                end = aux[header.index("End")]
-                ref = aux[header.index("Ref")]
-                alt = aux[header.index("Alt")]
-                refGenome = "hg19"
-                gen = aux[header.index("Gene.refGene")]
-                typ = aux[header.index("Func.refGene")]
-                exo = aux[header.index("ExonicFunc.refGene")]
-                temp = aux[header.index("AAChange.refGene")]
-                # Recoger la informacion de HGVS para cDNA y proteina
-                if temp != "NA" :
-                    # ANNOVAR reporta la informacion sobre los distintos transcritos separados por comas. Recoger el primero, suponiendo que es el canonico
-                    transcritos = temp.split(",")[0]
-                    try :
-                        genAux, transAux, exon, cdna, prot = transcritos.split(":")
-                    except ValueError :
-                        genAux = "NA"
-                        transAux = "NA"
-                        exon = "NA"
-                        cdna = "NA"
-                        prot = "NA"
+        with open(filename, "r") as fi :
+            for l in fi :
+                aux = l.strip().split("\t")
+                if len(header) == 0 :
+                    header = aux
+                    # Buscar si todas las columnas para la base de datos tiene el nombre esperado
+                    if "Chr" not in header :
+                        raise ValueError("ERROR: Chromosome column not found")
                 else :
-                    genAux = transAux = exon = cdna = prot = "NA"
-                dbsnp = aux[header.index("avsnp150")]
-                sgClinvar = aux[header.index("CLNSIG")]
-                cosmic = aux[header.index("cosmic70")]
-                if cosmic != "NA" :
-                    temp = cosmic.split(";")[0]
-                    cosmic = temp.split(",")[0].strip("ID=") # Recoger el primer identificador de COSMIC que reporta ANNOVAR
+                    # Comprobar si la muestra ya se ha guardado en la base de datos previamente
+                    chr = aux[header.index("Chr")]
+                    start = aux[header.index("Start")]
+                    end = aux[header.index("End")]
+                    ref = aux[header.index("Ref")]
+                    alt = aux[header.index("Alt")]
+                    refGenome = "hg19"
+                    gen = aux[header.index("Gene.refGene")]
+                    typ = aux[header.index("Func.refGene")]
+                    exo = aux[header.index("ExonicFunc.refGene")]
+                    temp = aux[header.index("AAChange.refGene")]
+                    # Recoger la informacion de HGVS para cDNA y proteina
+                    if temp != "NA" :
+                        # ANNOVAR reporta la informacion sobre los distintos transcritos separados por comas. Recoger el primero, suponiendo que es el canonico
+                        transcritos = temp.split(",")[0]
+                        try :
+                            genAux, transAux, exon, cdna, prot = transcritos.split(":")
+                        except ValueError :
+                            genAux = "NA"
+                            transAux = "NA"
+                            exon = "NA"
+                            cdna = "NA"
+                            prot = "NA"
+                    else :
+                        genAux = transAux = exon = cdna = prot = "NA"
+                    dbsnp = aux[header.index("avsnp150")]
+                    sgClinvar = aux[header.index("CLNSIG")]
+                    cosmic = aux[header.index("cosmic70")]
+                    if cosmic != "NA" :
+                        temp = cosmic.split(";")[0]
+                        cosmic = temp.split(",")[0].strip("ID=") # Recoger el primer identificador de COSMIC que reporta ANNOVAR
 
-                # Guardar el resumen de predictores
-                pred_vals = []
-                for p in pred_keys :
-                    pred_vals.append(aux[header.index(p)])
-                sumPreds = summaryPredictors(pred_keys, pred_vals)
+                    # Guardar el resumen de predictores
+                    pred_vals = []
+                    for p in pred_keys :
+                        pred_vals.append(aux[header.index(p)])
+                    sumPreds = summaryPredictors(pred_keys, pred_vals)
 
-                # Guardar las MAFs en una lista para sacar la mayor
-                pop_vals = []
-                for p in pop_keys :
-                    pop_vals.append(aux[header.index(p)])
+                    # Guardar las MAFs en una lista para sacar la mayor
+                    pop_vals = []
+                    for p in pop_keys :
+                        pop_vals.append(aux[header.index(p)])
 
-                popMax, maxMaf = getPopMax(pop_keys, pop_vals)
-                anotacions = ""
+                    popMax, maxMaf = getPopMax(pop_keys, pop_vals)
 
-                # Como las columnas del vcf no estan anotadas el filtro0.hg19_mutianno.txt, se usa el valor directamente
-                filter = aux[144]
-                format = aux[146].split(":")
-                vals = aux[147].split(":")
-                # Comprobar que los numeros de columna son correctos
-                if format[0] == "GT" :
-                    covRef = vals[format.index("RD")]
-                    covAlt = vals[format.index("AD")]
-                    refFw = vals[format.index("RDF")]
-                    refRv = vals[format.index("RDR")]
-                    altFw = vals[format.index("ADF")]
-                    altRv = vals[format.index("ADR")]
-                    vaf = vals[format.index("FREQ")].replace("%", "").replace(",", ".")
-                    if filter == "PASS" :
-                        filter = filtrarVariante(typ, exo, maxMaf, vaf)
-                    infoRun = ""
-                    print("{}\t{}\t{}\t{}\t{}".format(aux[0:6], aux[8], aux[147], maxMaf,filter))
-                else :
-                    print("ERROR: Invalid column found when getting the FORMAT VCF data. Please, change that value in 'format = aux[146].split(...' line")
-                    sys.exit()
+                    # Como las columnas del vcf no estan anotadas el filtro0.hg19_mutianno.txt, se usa el valor directamente
+                    filter = aux[144]
+                    format = aux[146].split(":")
+                    vals = aux[147].split(":")
+                    # Comprobar que los numeros de columna son correctos
+                    if format[0] == "GT" :
+                        covRef = vals[format.index("RD")]
+                        covAlt = vals[format.index("AD")]
+                        refFw = vals[format.index("RDF")]
+                        refRv = vals[format.index("RDR")]
+                        altFw = vals[format.index("ADF")]
+                        altRv = vals[format.index("ADR")]
+                        vaf = vals[format.index("FREQ")].replace("%", "").replace(",", ".")
+                        if filter == "PASS" :
+                            filter = filtrarVariante(typ, exo, maxMaf, vaf)
+                    else :
+                        print("ERROR: Invalid column found when getting the FORMAT VCF data. Please, change that value in 'format = aux[146].split(...' line")
+                        sys.exit()
 
-                ## TODO: Comprovar si la variant existeix en la base de dades. Recollir l'identificador de la variant per la taula run
-                ## TODO: Crear les consultes a la base de dades
+                    # Comprobar si la variante existe en la base de datos. Guardar la variante en caso de que no exista
+                    dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="ALLvar")
+                    qvar = "INSERT INTO variant(cromosoma,inicio,fin,referencia,observado,genoma_ref,gen,tipo_var,tipo_ex,hgvs_cDNA,hgvs_prot,exon,dbsnp,clinvar,cosmic,sum_pred,maf,pop_maf) "
+                    with dbcon as con :
+                        query = "SELECT id FROM variant WHERE cromosoma='{chr}' AND inicio={sta} AND observado='{alt}' AND genoma_ref='{gref}'".format(chr = chr, sta = start, alt = alt, gref = refGenome)
+                        with con.cursor() as cur :
+                            cur.execute(query)
+                            res = cur.fetchall()
+                            if len(res) == 0:
+                                if maxMaf == "NA" :
+                                    maxMaf = "NULL"
+                                ## TODO: Fer que les queries vagen totes en un bloc per cada mostra/arxiu
+                                qvar += "VALUES('{chr}',{sta},{end},'{ref}','{alt}','{genRef}','{gen}','{typ}','{exType}','{cdna}','{prot}','{exon}','{snp}','{cli}','{cosm}','{pred}',{maf},'{pop}')".format(
+                                chr=chr, sta=start, end=end, ref=ref, alt=alt, genRef=refGenome, gen=gen, typ=typ, exType=exo, cdna=cdna, prot=prot, exon=exon, snp=dbsnp, cli=sgClinvar, cosm=cosmic, pred=sumPreds,
+                                maf=maxMaf, pop=popMax)
+                                cur.execute(qvar)
+                                con.commit()
+                                idVariant = cur.lastrowid
+                                backup = backup + qvar + ";\n"
+                            # Guardar el identificador de la variante para ponerlo en los datos de la tabla run
+                            else :
+                                idVariant = res[0][0]
+                    # Guardar los datos del run en la base de datos
+                    qrun = "INSERT INTO run(id_variant, id_mostra, coverage, cov_ref, cov_alt, reads_FW_ref, reads_FW_alt, reads_RV_ref, reads_RV_alt, vaf, filtro) "
+                    ## TODO: Crear les consultes a la base de dades
+                    dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="ALLvar")
+                    with dbcon as con :
+                        qrun += "VALUES({var},'{samp}',{cov},{rcov},{acov},{rfcov},{afcov},{rrcov},{arcov},{vaf},'{filt}')".format(
+                        var=idVariant, samp=mostra, cov=covRef+covAlt, rcov=covRef, acov=covAlt, rfcov=refFw, afcov=altFw, rrcov=refRv, arcov=altRv, vaf=vaf, filt=filter)
+                        print(qrun)
+                        with con.cursor() as cur :
+                            cur.execute(qrun)
+                            con.commit()
+                            backup = backup + qrun + ";\n"
 
+        
     return backup
 
 
