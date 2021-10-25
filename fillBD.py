@@ -312,12 +312,15 @@ def fillALLdb(filename) :
                             if len(res) == 0:
                                 if maxMaf == "NA" :
                                     maxMaf = "NULL"
-                                ## TODO: Fer que les queries vagen totes en un bloc per cada mostra/arxiu
                                 qvar += "VALUES('{chr}',{sta},{end},'{ref}','{alt}','{genRef}','{gen}','{typ}','{exType}','{cdna}','{prot}','{exon}','{snp}','{cli}','{cosm}','{pred}',{maf},'{pop}')".format(
                                 chr=chr, sta=start, end=end, ref=ref, alt=alt, genRef=refGenome, gen=gen, typ=typ, exType=exo, cdna=cdna, prot=prot, exon=exon, snp=dbsnp, cli=sgClinvar, cosm=cosmic, pred=sumPreds,
                                 maf=maxMaf, pop=popMax)
-                                cur.execute(qvar)
-                                con.commit()
+                                try :
+                                    cur.execute(qvar)
+                                    con.commit()
+                                except :
+                                    print("ERROR ejecutando {}".format(qvar))
+                                    sys.exit(1)
                                 idVariant = cur.lastrowid
                                 backup = backup + qvar + ";\n"
                             # Guardar el identificador de la variante para ponerlo en los datos de la tabla run
@@ -325,18 +328,16 @@ def fillALLdb(filename) :
                                 idVariant = res[0][0]
                     # Guardar los datos del run en la base de datos
                     qrun = "INSERT INTO run(id_variant, id_mostra, coverage, cov_ref, cov_alt, reads_FW_ref, reads_FW_alt, reads_RV_ref, reads_RV_alt, vaf, filtro) "
-                    ## TODO: Crear les consultes a la base de dades
                     dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="ALLvar")
                     with dbcon as con :
                         qrun += "VALUES({var},'{samp}',{cov},{rcov},{acov},{rfcov},{afcov},{rrcov},{arcov},{vaf},'{filt}')".format(
-                        var=idVariant, samp=mostra, cov=covRef+covAlt, rcov=covRef, acov=covAlt, rfcov=refFw, afcov=altFw, rrcov=refRv, arcov=altRv, vaf=vaf, filt=filter)
-                        print(qrun)
+                        var=idVariant, samp=mostra, cov=int(covRef)+int(covAlt), rcov=covRef, acov=covAlt, rfcov=refFw, afcov=altFw, rrcov=refRv, arcov=altRv, vaf=vaf, filt=filter)
                         with con.cursor() as cur :
                             cur.execute(qrun)
                             con.commit()
                             backup = backup + qrun + ";\n"
 
-        
+
     return backup
 
 
@@ -350,14 +351,15 @@ def fillVHdb(filename) :
     pass
 
 
-def findVariantFiles(folder) :
-    db = "" # Nombre de la base de datos que se quiere rellenar. Sirve para poder distinguir los ditintos tipos archivos con variantes anotadas
+def findVariantFiles(folder, db = None) :
     filename = "" # Nombre del archivo que se va a buscar. Depende de la base de datos
     files = [] # Lista con  los archivos encontrados por el comando find. Con estos archivos se rellenara la base de datos
     sqlcode = "" # Datos para guardar en la base de datos. Se guardaran en un archivo sql aparte como copia de seguridad
     if os.path.isdir(folder) :
         # Preguntar por la base de datos para saber que archivo de variantes hay que buscar
-        db = input("INPUT: Which database do you want to fill (ALL, MDS, VH)? ")
+        if db == None :
+            db = input("INPUT: Which database do you want to fill (ALL, MDS, VH)? ")
+
         if db == "ALL" :
             filename = "filtro0.hg19_multianno.txt"
         elif db == "VH" :
@@ -384,6 +386,10 @@ def findVariantFiles(folder) :
                     tmp = {}
                     if db == "ALL" :
                         sqlcode += fillALLdb(f)
+
+            with open("sql/{}.sql".format(db), "a") as fi :
+                fi.write(sqlcode)
+                print("INFO: SQL backup file stored in sql/{}.sql".format(db))
         else :
             # No se ha encontrado ningun archivo con el nombre que se buscaba
             raise TypeError("ERROR: No files found with the name {} in {}".format(filename, folder))
@@ -396,5 +402,7 @@ if __name__ == "__main__" :
     if len(sys.argv) < 2 :
         folder = input("INPUT: Where can I find the NGS run? ")
         findVariantFiles(folder)
-    else :
+    elif len(sys.argv) == 2 :
         findVariantFiles(sys.argv[1])
+    else :
+        findVariantFiles(sys.argv[1], sys.argv[2])
