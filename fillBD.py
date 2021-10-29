@@ -318,8 +318,11 @@ def fillALLdb(filename) :
                                 try :
                                     cur.execute(qvar)
                                     con.commit()
-                                except :
-                                    print("ERROR ejecutando {}".format(qvar))
+                                except mysql.connector.Error as err:
+                                    print("ERROR: ejecutando \n{}\nDescripcion".format(qvar))
+                                    print("{} - {}".format(err.errno, err.msg))
+                                    cur.execute("DELETE FROM mostra WHERE id='{}'".format(mostra))
+                                    con.commit()
                                     sys.exit(1)
                                 idVariant = cur.lastrowid
                                 backup = backup + qvar + ";\n"
