@@ -192,9 +192,7 @@ def filtrarVariante(type, exoType, maf, vaf) :
 def anotarVariante(varFile) :
     vDir = os.path.dirname(varFile)
     conv = "/opt/annovar20200607/convert2annovar.pl -format vcf4 -outfile {dir}/raw.av -includeinfo {fic}".format(dir = vDir, fic = varFile)
-    anno = "/opt/annovar20200607/table_annovar.pl raw.av /home/ffuster/share/biodata/Indexes/ANNOVAR/humandb -buildver hg19 -out raw -remove --protocol refGene,avsnp150,1000g2015aug_all,\
-    1000g2015aug_afr,1000g2015aug_amr,1000g2015aug_eas,1000g2015aug_eur,1000g2015aug_sas,exac03,gnomad211_exome,gnomad211_genome,esp6500siv2_all,esp6500siv2_ea,esp6500siv2_aa,clinvar_20190305,\
-    cosmic70,dbnsfp35a --operation g,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f --nastring NA --otherinfo"
+    anno = "/opt/annovar20200607/table_annovar.pl {dir}/raw.av /home/ffuster/share/biodata/Indexes/ANNOVAR/humandb -buildver hg19 -out {dir}/raw -remove --protocol refGene,avsnp150,1000g2015aug_all,1000g2015aug_afr,1000g2015aug_amr,1000g2015aug_eas,1000g2015aug_eur,1000g2015aug_sas,exac03,gnomad211_exome,gnomad211_genome,esp6500siv2_all,esp6500siv2_ea,esp6500siv2_aa,clinvar_20190305,cosmic70,dbnsfp35a --operation g,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f --nastring NA --otherinfo".format(dir = vDir)
     args = shlex.split(conv)
     p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
     out, err = p.communicate()
@@ -203,7 +201,7 @@ def anotarVariante(varFile) :
     out, err = p.communicate()
     if p.returncode != 0 :
         print(err)
-        print(conv)
+        print(anno)
     sys.exit()
     shutil.move("raw.hg19_mutianno.txt", "{}/raw.hg19_mutianno.txt".format(vDir))
 
