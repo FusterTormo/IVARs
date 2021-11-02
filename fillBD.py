@@ -198,6 +198,9 @@ def anotarVariante(varFile) :
     args = shlex.split(conv)
     p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
     out, err = p.communicate()
+    args = shlex.split(anno)
+    p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+    out, err = p.communicate()
     if p.returncode != 0 :
         print(err)
         print(conv)
