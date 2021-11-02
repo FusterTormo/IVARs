@@ -354,17 +354,19 @@ def fillVHdb(filename) :
     pass
 
 def findMDSfiles(dir) :
-    filenames = ["raw.reanno.tsv", ]
-    for f in filenames :
-        cmd = "find {} -name {}".format(dir, f)
-        args = shlex.split(cmd)
-        p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
-        out, err = p.communicate()
-        arx = out.decode().strip()
-        if arx != "" :
-            print("Arxiu = {}".format(f))
-        else :
-            print("No trobat {}".format(f))
+    cmd = "find {} -name *vcf".format(dir)
+    args = shlex.split(cmd)
+    p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+    out, err = p.communicate()
+    arx = out.decode().strip()
+    for a in arx :
+        if arx.endswith("vcf") :
+            if a == "varscan.vcf" :
+                print("Trobat un varscan")
+            elif a == "mutect.vcf" :
+                print("Arxiu = {}".format(a))
+            else :
+                print("Trobat format estrany")
 
 
 def findVariantFiles(folder, db = None) :
