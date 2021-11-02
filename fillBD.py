@@ -378,7 +378,8 @@ def findMDSfiles(dir) :
         if a.endswith("vcf") :
             vc = os.path.basename(a)
             if vc == "varscan.vcf" :
-                print("Trobat un varscan")
+                print("Anotando {}".format(a))
+                anotarVariante(a)
             elif vc == "mutect.filtered.vcf" :
                 ## TODO: Convertir el mutect.filtered.vcf en mutect.revised.vcf per evitar variants multiples (executar AUP/revisaVcf.py)
                 newf = a.replace("mutect.filtered.vcf", "mutect.revised.vcf")
