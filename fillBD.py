@@ -358,15 +358,16 @@ def findMDSfiles(dir) :
     args = shlex.split(cmd)
     p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
     out, err = p.communicate()
-    arx = out.decode().strip()
+    arx = out.decode().strip().split("\n")
     for a in arx :
-        if arx.endswith("vcf") :
-            if a == "varscan.vcf" :
+        if a.endswith("vcf") :
+            vc = os.path.basename(a)
+            if vc == "varscan.vcf" :
                 print("Trobat un varscan")
-            elif a == "mutect.vcf" :
+            elif vc == "mutect.filtered.vcf" :
                 print("Arxiu = {}".format(a))
             else :
-                print("Trobat format estrany")
+                print("Trobat format estrany".format(a))
 
 
 def findVariantFiles(folder, db = None) :
