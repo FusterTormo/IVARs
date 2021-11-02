@@ -4,7 +4,6 @@
 import mysql.connector
 import os
 import shlex
-import shutil
 import subprocess
 import sys
 
@@ -190,20 +189,23 @@ def filtrarVariante(type, exoType, maf, vaf) :
     return filtro
 
 def anotarVariante(varFile) :
+    """Anota el archivo vcf pasado por parametro usando ANNOVAR. Los datos se guardan en la misma carpeta donde esta el vcf"""
     vDir = os.path.dirname(varFile)
     conv = "/opt/annovar20200607/convert2annovar.pl -format vcf4 -outfile {dir}/raw.av -includeinfo {fic}".format(dir = vDir, fic = varFile)
     anno = "/opt/annovar20200607/table_annovar.pl {dir}/raw.av /home/ffuster/share/biodata/Indexes/ANNOVAR/humandb -buildver hg19 -out {dir}/raw -remove --protocol refGene,avsnp150,1000g2015aug_all,1000g2015aug_afr,1000g2015aug_amr,1000g2015aug_eas,1000g2015aug_eur,1000g2015aug_sas,exac03,gnomad211_exome,gnomad211_genome,esp6500siv2_all,esp6500siv2_ea,esp6500siv2_aa,clinvar_20190305,cosmic70,dbnsfp35a --operation g,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f --nastring NA --otherinfo".format(dir = vDir)
     args = shlex.split(conv)
     p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
     out, err = p.communicate()
+    if p.returncode != 0 :
+        print("ERROR: While executing ANNOVAR. Check below possible errors. Command executed:\n{}".format(anno))
+        sys.exit(1)
     args = shlex.split(anno)
     p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
     out, err = p.communicate()
     if p.returncode != 0 :
-        print(err)
-        print(anno)
-    sys.exit()
-    shutil.move("raw.hg19_mutianno.txt", "{}/raw.hg19_mutianno.txt".format(vDir))
+        print("ERROR: While executing ANNOVAR. Check below possible errors. Command executed:\n{}".format(anno))
+        sys.exit(1)
+
 
 def fillALLdb(filename) :
     """
@@ -378,13 +380,21 @@ def findMDSfiles(dir) :
     for a in arx :
         if a.endswith("vcf") :
             vc = os.path.basename(a)
+            samplename = a.split("/")[-3]
+            dirname = os.path.dirname(a)
             if vc == "varscan.vcf" :
-                print("Anotando {}".format(a))
                 anotarVariante(a)
             elif vc == "mutect.filtered.vcf" :
-                ## TODO: Convertir el mutect.filtered.vcf en mutect.revised.vcf per evitar variants multiples (executar AUP/revisaVcf.py)
+                # Mutect2 escribe las variantes multialelicas en una misma linea. En caso de que haya, comprobar si se han separado o separarlas si no es el caso
                 newf = a.replace("mutect.filtered.vcf", "mutect.revised.vcf")
-                # if not os.path.isfile(newf)
+                if not os.path.isfile(newf) :
+                    cmd = "python3 /home/ffuster/AUP/revisaVcf.py {input} {dir}/mutect.revised.vcf".format(input = a, dir = dirname)
+                    args = shlex.split(cmd)
+                    p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+                    out, err = pr.communicate()
+                    if p.returncode != 0 :
+                        print("ERROR: While executng {}. Description: {}".format(cmd, err))
+                anotarVariante(newf)
             else :
                 print("Trobat format estrany".format(a))
 
