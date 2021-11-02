@@ -353,6 +353,19 @@ def fillVHdb(filename) :
     """
     pass
 
+def findMDSfiles(dir) :
+    filenames = ["raw.reanno.tsv", ]
+    for f in filenames :
+        cmd = "find {} -name {}".format(dir, f)
+        args = shlex.split(cmd)
+        p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+        out, err = p.communicate()
+        arx = out.decode().strip()
+        if arx != "" :
+            print("Arxiu = {}".format(f))
+        else :
+            print("No trobat {}".format(f))
+
 
 def findVariantFiles(folder, db = None) :
     filename = "" # Nombre del archivo que se va a buscar. Depende de la base de datos
@@ -368,7 +381,7 @@ def findVariantFiles(folder, db = None) :
         elif db == "VH" :
             filename = "raw.reanno.tsv"
         elif db == "MDS" :
-            print("TODO: Pending create the database")
+            filename = findMDSfiles(folder)
             sys.exit(0)
         else :
             raise ValueError("ERROR: Unknown database")
