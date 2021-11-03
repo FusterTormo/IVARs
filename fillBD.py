@@ -189,22 +189,108 @@ def filtrarVariante(type, exoType, maf, vaf) :
     return filtro
 
 def anotarVariante(varFile) :
-    """Anota el archivo vcf pasado por parametro usando ANNOVAR. Los datos se guardan en la misma carpeta donde esta el vcf"""
+    """Anota el archivo vcf pasado por parametro usando ANNOVAR. Crea dos archivos: raw.av y raw.hg19_mutianno.txt. Los archivos se guardan en la misma carpeta donde esta el vcf
+    Devuelve el nombre del archivo anotado"""
     vDir = os.path.dirname(varFile)
-    conv = "/opt/annovar20200607/convert2annovar.pl -format vcf4 -outfile {dir}/raw.av -includeinfo {fic}".format(dir = vDir, fic = varFile)
-    anno = "/opt/annovar20200607/table_annovar.pl {dir}/raw.av /home/ffuster/share/biodata/Indexes/ANNOVAR/humandb -buildver hg19 -out {dir}/raw -remove --protocol refGene,avsnp150,1000g2015aug_all,1000g2015aug_afr,1000g2015aug_amr,1000g2015aug_eas,1000g2015aug_eur,1000g2015aug_sas,exac03,gnomad211_exome,gnomad211_genome,esp6500siv2_all,esp6500siv2_ea,esp6500siv2_aa,clinvar_20190305,cosmic70,dbnsfp35a --operation g,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f --nastring NA --otherinfo".format(dir = vDir)
-    args = shlex.split(conv)
-    p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
-    out, err = p.communicate()
-    if p.returncode != 0 :
-        print("ERROR: While executing ANNOVAR. Check below possible errors. Command executed:\n{}".format(anno))
-        sys.exit(1)
-    args = shlex.split(anno)
-    p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
-    out, err = p.communicate()
-    if p.returncode != 0 :
-        print("ERROR: While executing ANNOVAR. Check below possible errors. Command executed:\n{}".format(anno))
-        sys.exit(1)
+    av = "{}/raw.av".format(vDir)
+    txt = "{}/raw.hg19_multianno.txt".format(vDir)
+    conv = "/opt/annovar20200607/convert2annovar.pl -format vcf4 -outfile {input} -includeinfo {fic}".format(input = av, fic = varFile)
+    anno = "/opt/annovar20200607/table_annovar.pl {input} /home/ffuster/share/biodata/Indexes/ANNOVAR/humandb -buildver hg19 -out {dir}/raw -remove --protocol refGene,avsnp150,1000g2015aug_all,1000g2015aug_afr,1000g2015aug_amr,1000g2015aug_eas,1000g2015aug_eur,1000g2015aug_sas,exac03,gnomad211_exome,gnomad211_genome,esp6500siv2_all,esp6500siv2_ea,esp6500siv2_aa,clinvar_20190305,cosmic70,dbnsfp35a --operation g,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f --nastring NA --otherinfo".format(dir = vDir, input = av)
+    if not os.path.isfile(av) :
+        args = shlex.split(conv)
+        p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+        out, err = p.communicate()
+        if p.returncode != 0 :
+            print("ERROR: While executing ANNOVAR. Check below possible errors. Command executed:\n{}".format(anno))
+            sys.exit(1)
+    if not os.path.isfile(txt) :
+        args = shlex.split(anno)
+        p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+        out, err = p.communicate()
+        if p.returncode != 0 :
+            print("ERROR: While executing ANNOVAR. Check below possible errors. Command executed:\n{}".format(anno))
+            sys.exit(1)
+
+    return txt
+
+def varscan2db(line, header) :
+    pop_keys = ["1000g2015aug_all", "1000g2015aug_afr", "1000g2015aug_amr", "1000g2015aug_eas", "1000g2015aug_eur", "1000g2015aug_sas", "ExAC_ALL", "ExAC_AFR", "ExAC_AMR",
+    "ExAC_EAS", "ExAC_FIN", "ExAC_NFE", "ExAC_OTH", "ExAC_SAS", "AF", "AF_popmax", "AF_male", "AF_female", "AF_raw", "AF_afr", "AF_sas", "AF_amr", "AF_eas",
+    "AF_nfe", "AF_fin", "AF_asj", "AF_oth", "non_topmed_AF_popmax", "non_neuro_AF_popmax", "non_cancer_AF_popmax", "controls_AF_popmax", "AF", "AF_popmax",
+    "AF_male", "AF_female", "AF_raw", "AF_afr", "AF_sas", "AF_amr", "AF_eas", "AF_nfe", "AF_fin", "AF_asj", "AF_oth", "non_topmed_AF_popmax", "non_neuro_AF_popmax",
+    "non_cancer_AF_popmax", "controls_AF_popmax", "esp6500siv2_all", "esp6500siv2_ea", "esp6500siv2_aa"]
+    pred_keys = ["SIFT_pred", "Polyphen2_HDIV_pred", "Polyphen2_HVAR_pred", "LRT_pred", "MutationTaster_pred", "MutationAssessor_pred", "FATHMM_pred", "PROVEAN_pred",
+    "MetaSVM_pred", "MetaLR_pred", "DANN_score"]
+    var = {}
+    aux = line.strip().split("\t")
+    var["chr"] = aux[header.index("Chr")]
+    var["start"] = aux[header.index("Start")]
+    var["end"] = aux[header.index("End")]
+    var["ref"] = aux[header.index("Ref")]
+    var["alt"] = aux[header.index("Alt")]
+    var["refGen"] = "hg19"
+    var["gene"] = aux[header.index("Gene.refGene")]
+    var["type"] = aux[header.index("Func.refGene")]
+    var["exoType"] = aux[header.index("ExonicFunc.refGene")]
+    temp = aux[header.index("AAChange.refGene")]
+    # Recoger la informacion de HGVS para cDNA y proteina
+    if temp != "NA" :
+        # ANNOVAR reporta la informacion sobre los distintos transcritos separados por comas. Recoger el primero, suponiendo que es el canonico
+        transcritos = temp.split(",")[0]
+        try :
+            genAux, transAux, exon, cdna, prot = transcritos.split(":")
+        except ValueError :
+            genAux = "NA"
+            transAux = "NA"
+            exon = "NA"
+            cdna = "NA"
+            prot = "NA"
+    else :
+        genAux = transAux = exon = cdna = prot = "NA"
+    var["transcript"] = transAux
+    var["exon"] = exon
+    var["cdna"] = cdna
+    var["protein"] = prot
+    var["dbsnp"] = aux[header.index("avsnp150")]
+    var["clinvar"] = aux[header.index("CLNSIG")]
+    var["cosmic"] = aux[header.index("cosmic70")]
+    if var["cosmic"] != "NA" :
+        temp = var["cosmic"].split(";")[0]
+        var["cosmic"] = temp.split(",")[0].strip("ID=") # Recoger el primer identificador de COSMIC que reporta ANNOVAR
+
+    # Guardar el resumen de predictores
+    pred_vals = []
+    for p in pred_keys :
+        pred_vals.append(aux[header.index(p)])
+    var["predictors"] = summaryPredictors(pred_keys, pred_vals)
+
+    # Guardar las MAFs en una lista para sacar la mayor
+    pop_vals = []
+    for p in pop_keys :
+        pop_vals.append(aux[header.index(p)])
+
+    var["popMax"], var["maxMaf"] = getPopMax(pop_keys, pop_vals)
+
+    # Como las columnas del vcf no estan anotadas el filtro0.hg19_mutianno.txt, se usa el valor directamente
+    var["filter"] = aux[144]
+    format = aux[146].split(":")
+    vals = aux[147].split(":")
+    # Comprobar que los numeros de columna son correctos
+    if format[0] == "GT" :
+        var["covRef"] = vals[format.index("RD")]
+        var["covAlt"] = vals[format.index("AD")]
+        var["refFw"] = vals[format.index("RDF")]
+        var["refRv"] = vals[format.index("RDR")]
+        var["altFw"] = vals[format.index("ADF")]
+        var["altRv"] = vals[format.index("ADR")]
+        var["vaf"] = vals[format.index("FREQ")].replace("%", "").replace(",", ".")
+        if var["filter"] == "PASS" :
+            var["filter"] = filtrarVariante(var["type"], var["exoType"], var["maxMaf"], var["vaf"])
+    else :
+        print("ERROR: Invalid column found when getting the FORMAT VCF data. Please, change that value in 'format = aux[146].split(...' line")
+        sys.exit()
+
+    return var
 
 
 def fillALLdb(filename) :
@@ -255,7 +341,7 @@ def fillALLdb(filename) :
                     if "Chr" not in header :
                         raise ValueError("ERROR: Chromosome column not found")
                 else :
-                    # Comprobar si la muestra ya se ha guardado en la base de datos previamente
+                    # Extraer la informacion de la variante
                     chr = aux[header.index("Chr")]
                     start = aux[header.index("Start")]
                     end = aux[header.index("End")]
@@ -371,6 +457,21 @@ def fillVHdb(filename) :
     """
     pass
 
+def fillMDSdb(filename, vcaller) :
+    header = []
+    variant = {}
+    if vcaller == "varscan.vcf" :
+        with open(filename, "r") as fi :
+            for l in fi :
+                aux = l.strip().split("\t")
+                if len(header) == 0 :
+                    header = aux
+                else :
+                    variant = varscan2db(l, header)
+                    print(variant.keys())
+                    sys.exit()
+
+
 def findMDSfiles(dir) :
     cmd = "find {} -name *vcf".format(dir)
     args = shlex.split(cmd)
@@ -383,7 +484,8 @@ def findMDSfiles(dir) :
             samplename = a.split("/")[-3]
             dirname = os.path.dirname(a)
             if vc == "varscan.vcf" :
-                anotarVariante(a)
+                annoFile = anotarVariante(a)
+                fillMDSdb(annoFile, vc)
             elif vc == "mutect.filtered.vcf" :
                 # Mutect2 escribe las variantes multialelicas en una misma linea. En caso de que haya, comprobar si se han separado o separarlas si no es el caso
                 newf = a.replace("mutect.filtered.vcf", "mutect.revised.vcf")
@@ -394,7 +496,7 @@ def findMDSfiles(dir) :
                     out, err = pr.communicate()
                     if p.returncode != 0 :
                         print("ERROR: While executng {}. Description: {}".format(cmd, err))
-                anotarVariante(newf)
+                annoFile = anotarVariante(newf)
             else :
                 print("Trobat format estrany".format(a))
 
