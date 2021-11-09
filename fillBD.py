@@ -56,6 +56,17 @@ id (identificador de la mostra)
 [...] (es podrien afegir mes dades segons vulguen els usuaris)
 """
 
+"""
+CONSTANTES
+"""
+pop_keys = ["1000g2015aug_all", "1000g2015aug_afr", "1000g2015aug_amr", "1000g2015aug_eas", "1000g2015aug_eur", "1000g2015aug_sas", "ExAC_ALL", "ExAC_AFR", "ExAC_AMR",
+"ExAC_EAS", "ExAC_FIN", "ExAC_NFE", "ExAC_OTH", "ExAC_SAS", "AF", "AF_popmax", "AF_male", "AF_female", "AF_raw", "AF_afr", "AF_sas", "AF_amr", "AF_eas",
+"AF_nfe", "AF_fin", "AF_asj", "AF_oth", "non_topmed_AF_popmax", "non_neuro_AF_popmax", "non_cancer_AF_popmax", "controls_AF_popmax", "AF", "AF_popmax",
+"AF_male", "AF_female", "AF_raw", "AF_afr", "AF_sas", "AF_amr", "AF_eas", "AF_nfe", "AF_fin", "AF_asj", "AF_oth", "non_topmed_AF_popmax", "non_neuro_AF_popmax",
+"non_cancer_AF_popmax", "controls_AF_popmax", "esp6500siv2_all", "esp6500siv2_ea", "esp6500siv2_aa"]
+pred_keys = ["SIFT_pred", "Polyphen2_HDIV_pred", "Polyphen2_HVAR_pred", "LRT_pred", "MutationTaster_pred", "MutationAssessor_pred", "FATHMM_pred", "PROVEAN_pred",
+"MetaSVM_pred", "MetaLR_pred", "DANN_score"]
+
 def summaryPredictors(keys, values) :
     deleterious = 0
     tolerated = 0
@@ -142,8 +153,6 @@ def summaryPredictors(keys, values) :
 
     return "{}D, {}T, {}U".format(deleterious, tolerated, unknown)
 
-
-
 def getPopMax(keys, values) :
     """Buscar la poblacion que tiene la MAF mayor y devolver el valor, junto con la poblacion reportada"""
     pop = ""
@@ -213,16 +222,8 @@ def anotarVariante(varFile) :
 
     return txt
 
-def varscan2db(line, header) :
-    pop_keys = ["1000g2015aug_all", "1000g2015aug_afr", "1000g2015aug_amr", "1000g2015aug_eas", "1000g2015aug_eur", "1000g2015aug_sas", "ExAC_ALL", "ExAC_AFR", "ExAC_AMR",
-    "ExAC_EAS", "ExAC_FIN", "ExAC_NFE", "ExAC_OTH", "ExAC_SAS", "AF", "AF_popmax", "AF_male", "AF_female", "AF_raw", "AF_afr", "AF_sas", "AF_amr", "AF_eas",
-    "AF_nfe", "AF_fin", "AF_asj", "AF_oth", "non_topmed_AF_popmax", "non_neuro_AF_popmax", "non_cancer_AF_popmax", "controls_AF_popmax", "AF", "AF_popmax",
-    "AF_male", "AF_female", "AF_raw", "AF_afr", "AF_sas", "AF_amr", "AF_eas", "AF_nfe", "AF_fin", "AF_asj", "AF_oth", "non_topmed_AF_popmax", "non_neuro_AF_popmax",
-    "non_cancer_AF_popmax", "controls_AF_popmax", "esp6500siv2_all", "esp6500siv2_ea", "esp6500siv2_aa"]
-    pred_keys = ["SIFT_pred", "Polyphen2_HDIV_pred", "Polyphen2_HVAR_pred", "LRT_pred", "MutationTaster_pred", "MutationAssessor_pred", "FATHMM_pred", "PROVEAN_pred",
-    "MetaSVM_pred", "MetaLR_pred", "DANN_score"]
+def getCommonData(aux, header) :
     var = {}
-    aux = line.strip().split("\t")
     var["chr"] = aux[header.index("Chr")]
     var["start"] = aux[header.index("Start")]
     var["end"] = aux[header.index("End")]
@@ -273,10 +274,18 @@ def varscan2db(line, header) :
 
     # Como las columnas del vcf no estan anotadas el filtro0.hg19_mutianno.txt, se usa el valor directamente
     var["filter"] = aux[144]
+
+    return var
+
+def varscan2db(line, header) :
+    aux = line.strip().split("\t")
+    var = getCommonData(aux, header)
+
     format = aux[146].split(":")
     vals = aux[147].split(":")
+
     # Comprobar que los numeros de columna son correctos
-    if format[0] == "GT" :
+    if "RD" in format and "AD" in format and "RDF" in format and "RDR" in format and "ADF" in format and "ADR" in format and "FREQ" in format :
         var["covRef"] = vals[format.index("RD")]
         var["covAlt"] = vals[format.index("AD")]
         var["refFw"] = vals[format.index("RDF")]
@@ -287,24 +296,84 @@ def varscan2db(line, header) :
         if var["filter"] == "PASS" :
             var["filter"] = filtrarVariante(var["type"], var["exoType"], var["maxMaf"], var["vaf"])
     else :
-        print("ERROR: Invalid column found when getting the FORMAT VCF data. Please, change that value in 'format = aux[146].split(...' line")
-        sys.exit()
+        raise ValueError("ERROR: Mandatory columns not found in FORMAT VCF data. Error column: {}".format(line))
 
     return var
 
+def mutect2db(line, header) :
+    aux = line.strip().split("\t")
+    var = getCommonData(aux, header)
+    format = aux[146].split(":")
+    vals = aux[147].split(":")
+
+    # PARCHE! Los filtros de Mutect2 son acumulativos y no creo que haga falta ponerlos todos. Como el maximo de
+    if len(var["filter"]) > 60 :
+        aux = var["filter"].split(";")
+        var["filter"] = ";".join(aux[0:3])
+
+    if "SB" in format and "AD" in format :
+        lst = vals[format.index("AD")].split(",")
+        var["covRef"] = int(lst[0])
+        var["covAlt"] = int(lst[1])
+        lst = vals[format.index("SB")].split(",")
+        var["refFw"] = int(lst[0])
+        var["refRv"] = int(lst[1])
+        var["altFw"] = int(lst[2])
+        var["altRv"] = int(lst[3])
+        var["vaf"] = round(100*(float(var["covAlt"])/float(var["covRef"] + var["covAlt"])), 3)
+    else :
+        raise ValueError("ERROR: Mandatory columns (SB, AD) not found in VCF. Data found {} - {}".format(format, vals))
+
+    return var
+
+def saveInDB(variant, dbName) :
+    # Comprobar si la variante se ha guardado previamente en la base de datos. Recoger el identificador de la variante
+    dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database=dbName)
+    with dbcon as con :
+        query = "SELECT id FROM variant WHERE cromosoma='{chr}' AND inicio={sta} AND observado='{alt}' AND genoma_ref='{gref}'".format(
+        chr = variant["chr"], sta = variant["start"], alt = variant["alt"], gref = variant["refGen"])
+        qvar = "INSERT INTO variant(cromosoma,inicio,fin,referencia,observado,genoma_ref,gen,tipo_var,tipo_ex,transcrito,hgvs_cDNA,hgvs_prot,exon,dbsnp,clinvar,cosmic,sum_pred,maf,pop_maf) "
+        with con.cursor() as cur :
+            cur.execute(query)
+            res = cur.fetchone()
+            # La variante no esta guardada en la base de datos
+            if res != None :
+                variant["id_variant"] = res[0]
+            else :
+                # Guardar los datos de una nueva variante
+                if variant["maxMaf"] == "NA" :
+                    variant["maxMaf"] = "NULL"
+                qvar += "VALUES('{chr}',{sta},{end},'{ref}','{alt}','{gRF}','{gen}','{typ}','{eTP}','{trans}','{cdna}','{prot}','{exon}','{dbsnp}','{clnvar}','{cosmic}','{preds}',{maf},'{popMaf}')".format(
+                chr = variant["chr"], sta = variant["start"], end = variant["end"], ref = variant["ref"], alt = variant["alt"], gRF = variant["refGen"], gen = variant["gene"],
+                typ = variant["type"], eTP = variant["exoType"], trans = variant["transcript"], cdna = variant["cdna"], prot = variant["protein"], exon = variant["exon"], dbsnp = variant["dbsnp"],
+                clnvar = variant["clinvar"], cosmic = variant["cosmic"], preds = variant["predictors"], maf = variant["maxMaf"], popMaf = variant["popMax"])
+                try :
+                    cur.execute(qvar)
+                    con.commit()
+                    variant["id_variant"] = cur.lastrowid
+                except mysql.connector.Error as err:
+                    print("ERROR: Executing \n{}\nDescription".format(qvar))
+                    print("{} - {}".format(err.errno, err.msg))
+                    cur.execute("DELETE FROM mostra WHERE id='{}'".format(variant["id_mostra"]))
+                    con.commit()
+                    sys.exit(1)
+
+            # Guardar los datos del run
+            qrun = "INSERT INTO run(id_variant,id_mostra,coverage,cov_ref,cov_alt,reads_FW_ref,reads_RV_ref,reads_FW_alt,reads_RV_alt,vaf,filtro) VALUES("
+            qrun += "{idv},'{idm}',{cov},{cref},{calt},{rFr},{rRr},{rFa},{rRa},{vaf},'{filt}')".format(idv = variant["id_variant"], idm = variant["id_mostra"],
+                cov = int(variant["covRef"]) + int(variant["covAlt"]), cref = variant["covRef"], calt = variant["covAlt"], rFr = variant["refFw"], rRr = variant["refRv"],
+                rFa = variant["altFw"], rRa = variant["altRv"], vaf = variant["vaf"], filt = variant["filter"])
+            try :
+                cur.execute(qrun)
+                con.commit()
+            except mysql.connector.Error as err:
+                print("ERROR: Executing \n{}\nDescription".format(qrun))
+                print("{} - {}".format(err.errno, err.msg))
+                cur.execute("DELETE FROM mostra WHERE id='{}'".format(variant["id_mostra"]))
+                con.commit()
+                sys.exit(1)
 
 def fillALLdb(filename) :
-    """
-    # Columnas si el archivo es tipo filtro0.hg19_mutianno.txt
-    Chr	Start	End	Ref	Alt	Func.refGene	Gene.refGene	GeneDetail.refGene	ExonicFunc.refGene	AAChange.refGene	avsnp150	1000g2015aug_all	1000g2015aug_afr	1000g2015aug_amr	1000g2015aug_eas	1000g2015aug_eur	1000g2015aug_sas	ExAC_ALL	ExAC_AFR	ExAC_AMR	ExAC_EAS	ExAC_FIN	ExAC_NFE	ExAC_OTH	ExAC_SAS	AF	AF_popmax	AF_male	AF_female	AF_raw	AF_afr	AF_sas	AF_amr	AF_eas	AF_nfe	AF_fin	AF_asj	AF_oth	non_topmed_AF_popmax	non_neuro_AF_popmax	non_cancer_AF_popmax	controls_AF_popmax	AF	AF_popmax	AF_male	AF_female	AF_raw	AF_afr	AF_sas	AF_amr	AF_eas	AF_nfe	AF_fin	AF_asj	AF_oth	non_topmed_AF_popmax	non_neuro_AF_popmax	non_cancer_AF_popmaxcontrols_AF_popmax	esp6500siv2_all	esp6500siv2_ea	esp6500siv2_aa	CLNALLELEID	CLNDN	CLNDISDB	CLNREVSTAT	CLNSIG	cosmic70	SIFT_score	SIFT_converted_rankscore	SIFT_pred	Polyphen2_HDIV_score	Polyphen2_HDIV_rankscore	Polyphen2_HDIV_pred	Polyphen2_HVAR_score	Polyphen2_HVAR_rankscore	Polyphen2_HVAR_pred	LRT_score	LRT_converted_rankscore	LRT_pred	MutationTaster_score	MutationTaster_converted_rankscore	MutationTaster_pred	MutationAssessor_score	MutationAssessor_score_rankscore	MutationAssessor_pred	FATHMM_score	FATHMM_converted_rankscore	FATHMM_pred	PROVEAN_score	PROVEAN_converted_rankscore	PROVEAN_pred	VEST3_score	VEST3_rankscore	MetaSVM_score	MetaSVM_rankscore	MetaSVM_pred	MetaLR_score	MetaLR_rankscore	MetaLR_pred	M-CAP_score	M-CAP_rankscore	M-CAP_pred	REVEL_score	REVEL_rankscore	MutPred_score	MutPred_rankscore	CADD_raw	CADD_raw_rankscore	CADD_phred	DANN_score	DANN_rankscore	fathmm-MKL_coding_score	fathmm-MKL_coding_rankscore	fathmm-MKL_coding_pred	Eigen_coding_or_noncoding	Eigen-raw	Eigen-PC-raw	GenoCanyon_score	GenoCanyon_score_rankscore	integrated_fitCons_score	integrated_fitCons_score_rankscore	integrated_confidence_value	GERP++_RS	GERP++_RS_rankscore	phyloP100way_vertebrate	phyloP100way_vertebrate_rankscore	phyloP20way_mammalian	phyloP20way_mammalian_rankscore	phastCons100way_vertebrate	phastCons100way_vertebrate_rankscore	phastCons20way_mammalian	phastCons20way_mammalian_rankscore	SiPhy_29way_logOdds	SiPhy_29way_logOdds_rankscore	Interpro_domain	GTEx_V6p_gene	GTEx_V6p_tissue	Otherinfo
-    """
-    pop_keys = ["1000g2015aug_all", "1000g2015aug_afr", "1000g2015aug_amr", "1000g2015aug_eas", "1000g2015aug_eur", "1000g2015aug_sas", "ExAC_ALL", "ExAC_AFR", "ExAC_AMR",
-    "ExAC_EAS", "ExAC_FIN", "ExAC_NFE", "ExAC_OTH", "ExAC_SAS", "AF", "AF_popmax", "AF_male", "AF_female", "AF_raw", "AF_afr", "AF_sas", "AF_amr", "AF_eas",
-    "AF_nfe", "AF_fin", "AF_asj", "AF_oth", "non_topmed_AF_popmax", "non_neuro_AF_popmax", "non_cancer_AF_popmax", "controls_AF_popmax", "AF", "AF_popmax",
-    "AF_male", "AF_female", "AF_raw", "AF_afr", "AF_sas", "AF_amr", "AF_eas", "AF_nfe", "AF_fin", "AF_asj", "AF_oth", "non_topmed_AF_popmax", "non_neuro_AF_popmax",
-    "non_cancer_AF_popmax", "controls_AF_popmax", "esp6500siv2_all", "esp6500siv2_ea", "esp6500siv2_aa"]
-    pred_keys = ["SIFT_pred", "Polyphen2_HDIV_pred", "Polyphen2_HVAR_pred", "LRT_pred", "MutationTaster_pred", "MutationAssessor_pred", "FATHMM_pred", "PROVEAN_pred",
-    "MetaSVM_pred", "MetaLR_pred", "DANN_score"]
     header = []
     mostra = ""
     files = os.listdir(os.path.dirname(filename))
@@ -407,7 +476,7 @@ def fillALLdb(filename) :
 
                     # Comprobar si la variante existe en la base de datos. Guardar la variante en caso de que no exista
                     dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="ALLvar")
-                    qvar = "INSERT INTO variant(cromosoma,inicio,fin,referencia,observado,genoma_ref,gen,tipo_var,tipo_ex,hgvs_cDNA,hgvs_prot,exon,dbsnp,clinvar,cosmic,sum_pred,maf,pop_maf) "
+                    qvar = "INSERT INTO variant(cromosoma,inicio,fin,referencia,observado,genoma_ref,gen,tipo_var,tipo_ex,transcrito,hgvs_cDNA,hgvs_prot,exon,dbsnp,clinvar,cosmic,sum_pred,maf,pop_maf) "
                     with dbcon as con :
                         query = "SELECT id FROM variant WHERE cromosoma='{chr}' AND inicio={sta} AND observado='{alt}' AND genoma_ref='{gref}'".format(chr = chr, sta = start, alt = alt, gref = refGenome)
                         with con.cursor() as cur :
@@ -416,14 +485,14 @@ def fillALLdb(filename) :
                             if len(res) == 0:
                                 if maxMaf == "NA" :
                                     maxMaf = "NULL"
-                                qvar += "VALUES('{chr}',{sta},{end},'{ref}','{alt}','{genRef}','{gen}','{typ}','{exType}','{cdna}','{prot}','{exon}','{snp}','{cli}','{cosm}','{pred}',{maf},'{pop}')".format(
-                                chr=chr, sta=start, end=end, ref=ref, alt=alt, genRef=refGenome, gen=gen, typ=typ, exType=exo, cdna=cdna, prot=prot, exon=exon, snp=dbsnp, cli=sgClinvar, cosm=cosmic, pred=sumPreds,
-                                maf=maxMaf, pop=popMax)
+                                qvar += "VALUES('{chr}',{sta},{end},'{ref}','{alt}','{genRef}','{gen}','{typ}','{exType}','{trans}','{cdna}','{prot}','{exon}','{snp}','{cli}','{cosm}','{pred}',{maf},'{pop}')".format(
+                                chr=chr, sta=start, end=end, ref=ref, alt=alt, genRef=refGenome, gen=gen, typ=typ, exType=exo, trans=transAux, cdna=cdna, prot=prot, exon=exon, snp=dbsnp, cli=sgClinvar, cosm=cosmic,
+                                pred=sumPreds, maf=maxMaf, pop=popMax)
                                 try :
                                     cur.execute(qvar)
                                     con.commit()
                                 except mysql.connector.Error as err:
-                                    print("ERROR: ejecutando \n{}\nDescripcion".format(qvar))
+                                    print("ERROR: Executing \n{}\nDescription".format(qvar))
                                     print("{} - {}".format(err.errno, err.msg))
                                     cur.execute("DELETE FROM mostra WHERE id='{}'".format(mostra))
                                     con.commit()
@@ -460,17 +529,46 @@ def fillVHdb(filename) :
 def fillMDSdb(filename, vcaller) :
     header = []
     variant = {}
-    if vcaller == "varscan.vcf" :
-        with open(filename, "r") as fi :
-            for l in fi :
-                aux = l.strip().split("\t")
-                if len(header) == 0 :
-                    header = aux
-                else :
-                    variant = varscan2db(l, header)
-                    print(variant.keys())
-                    sys.exit()
+    samplename = filename.split("/")[-3]
+    # Comprobar si la muestra ya se ha guardado en la base de datos previamente
+    dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="MDSvar")
+    with dbcon as con :
+        query = "SELECT id FROM mostra WHERE id='{}'".format(samplename);
+        with con.cursor() as cur :
+            cur.execute(query)
+            res = cur.fetchall()
+    if len(res) > 0 :
+        print("WARNING: Sample {} already stored in the database. Variants will not be stored".format(samplename))
+    else :
+        # Guardar una nueva muestra
+        dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="MDSvar")
+        with dbcon as con :
+            query = "INSERT INTO mostra(id) VALUES('{}')".format(samplename)
+            with con.cursor() as cur :
+                cur.execute(query)
+                con.commit()
 
+        if vcaller == "varscan.vcf" :
+            with open(filename, "r") as fi :
+                for l in fi :
+                    aux = l.strip().split("\t")
+                    if len(header) == 0 :
+                        header = aux
+                    else :
+                        variant = varscan2db(l, header)
+                        variant["id_mostra"] = samplename
+                        saveInDB(variant, "MDSvar")
+
+        elif vcaller == "mutect.revised.vcf" :
+            with open(filename, "r") as fi :
+                for l in fi :
+                    aux = l.strip().split("\t")
+                    if len(header) == 0 :
+                        header = aux
+                    else :
+                        variant = mutect2db(l, header)
+                        variant["id_mostra"] = samplename
+                        saveInDB(variant, "MDSvar")
 
 def findMDSfiles(dir) :
     cmd = "find {} -name *vcf".format(dir)
@@ -481,7 +579,6 @@ def findMDSfiles(dir) :
     for a in arx :
         if a.endswith("vcf") :
             vc = os.path.basename(a)
-            samplename = a.split("/")[-3]
             dirname = os.path.dirname(a)
             if vc == "varscan.vcf" :
                 annoFile = anotarVariante(a)
@@ -493,13 +590,19 @@ def findMDSfiles(dir) :
                     cmd = "python3 /home/ffuster/AUP/revisaVcf.py {input} {dir}/mutect.revised.vcf".format(input = a, dir = dirname)
                     args = shlex.split(cmd)
                     p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
-                    out, err = pr.communicate()
+                    out, err = p.communicate()
                     if p.returncode != 0 :
-                        print("ERROR: While executng {}. Description: {}".format(cmd, err))
+                        print("ERROR: While executing {}. Description: {}".format(cmd, err))
                 annoFile = anotarVariante(newf)
+                fillMDSdb(annoFile, "mutect.revised.vcf")
+            elif vc == "mutect.revised.vcf" :
+                annoFile = anotarVariante(a)
+                fillMDSdb(annoFile, a)
+            elif vc == "mutect.vcf" : # En la carpeta donde se ha lanzado mutect1
+                pass
             else :
-                print("Trobat format estrany".format(a))
-
+                print("ERROR: Invalid vcf file {}".format(a))
+    print("INFO: All data saved in MDSvar database.\nRemove the annotation files, if needed, running\n\trm */variantCalling/raw.av */variantCalling/raw.hg19_multianno.txt\nin '{}' folder".format(dir))
 
 def findVariantFiles(folder, db = None) :
     filename = "" # Nombre del archivo que se va a buscar. Depende de la base de datos
