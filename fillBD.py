@@ -224,7 +224,11 @@ def anotarVariante(varFile) :
 
 def getCommonData(aux, header) :
     var = {}
-    var["chr"] = aux[header.index("Chr")]
+    auxChr = aux[header.index("Chr")]
+    if auxChr.startswith("chr") :
+        var["chr"] = auxChr
+    else :
+        var["chr"] =  "chr{}".format(auxChr)
     var["start"] = aux[header.index("Start")]
     var["end"] = aux[header.index("End")]
     var["ref"] = aux[header.index("Ref")]
