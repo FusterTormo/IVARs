@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import os
+import shlex
+import subprocess
 
 def summaryPredictors(keys, values) :
     deleterious = 0
