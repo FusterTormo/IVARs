@@ -227,50 +227,45 @@ def fillMDSdb(filename, vcaller) :
     header = []
     variant = {}
     samplename = filename.split("/")[-3]
-    prompt = input("INPUT: I'm going to use {} as sample name. Is it correct? ".format(samplename))
-    if prompt not in ["Y", "y", "yes", "Yes"] :
-        samplename = input("INPUT: Then, give me the sample name (N to resume): ")
-
-    if samplename != "N" :
-        # Comprobar si la muestra ya se ha guardado en la base de datos previamente
+    # Comprobar si la muestra ya se ha guardado en la base de datos previamente
+    dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="MDSvar")
+    with dbcon as con :
+        query = "SELECT id FROM mostra WHERE id='{}'".format(samplename);
+        with con.cursor() as cur :
+            cur.execute(query)
+            res = cur.fetchall()
+    if len(res) > 0 :
+        print("WARNING: Sample {} already stored in the database. Variants will not be stored".format(samplename))
+    else :
+        # Guardar una nueva muestra
         dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="MDSvar")
         with dbcon as con :
-            query = "SELECT id FROM mostra WHERE id='{}'".format(samplename);
+            query = "INSERT INTO mostra(id) VALUES('{}')".format(samplename)
             with con.cursor() as cur :
                 cur.execute(query)
-                res = cur.fetchall()
-        if len(res) > 0 :
-            print("WARNING: Sample {} already stored in the database. Variants will not be stored".format(samplename))
-        else :
-            # Guardar una nueva muestra
-            dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="MDSvar")
-            with dbcon as con :
-                query = "INSERT INTO mostra(id) VALUES('{}')".format(samplename)
-                with con.cursor() as cur :
-                    cur.execute(query)
-                    con.commit()
+                con.commit()
 
-            if vcaller == "varscan.vcf" :
-                with open(filename, "r") as fi :
-                    for l in fi :
-                        aux = l.strip().split("\t")
-                        if len(header) == 0 :
-                            header = aux
-                        else :
-                            variant = lib.varscan2db(l, header)
-                            variant["id_mostra"] = samplename
-                            lib.saveInDB(variant, "MDSvar")
+        if vcaller == "varscan.vcf" :
+            with open(filename, "r") as fi :
+                for l in fi :
+                    aux = l.strip().split("\t")
+                    if len(header) == 0 :
+                        header = aux
+                    else :
+                        variant = lib.varscan2db(l, header)
+                        variant["id_mostra"] = samplename
+                        lib.saveInDB(variant, "MDSvar")
 
-            elif vcaller == "mutect.revised.vcf" :
-                with open(filename, "r") as fi :
-                    for l in fi :
-                        aux = l.strip().split("\t")
-                        if len(header) == 0 :
-                            header = aux
-                        else :
-                            variant = lib.mutect2db(l, header)
-                            variant["id_mostra"] = samplename
-                            lib.saveInDB(variant, "MDSvar")
+        elif vcaller == "mutect.revised.vcf" :
+            with open(filename, "r") as fi :
+                for l in fi :
+                    aux = l.strip().split("\t")
+                    if len(header) == 0 :
+                        header = aux
+                    else :
+                        variant = lib.mutect2db(l, header)
+                        variant["id_mostra"] = samplename
+                        lib.saveInDB(variant, "MDSvar")
 
 def findMDSfiles(dir) :
     cmd = "find {} -name *vcf".format(dir)
