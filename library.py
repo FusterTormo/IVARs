@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
+import mysql.connector
 import os
 import shlex
 import subprocess
