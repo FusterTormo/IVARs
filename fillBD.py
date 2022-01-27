@@ -235,6 +235,7 @@ def fillMDSdb(filename, vcaller) :
     if len(res) > 0 :
         print("WARNING: Sample {} already stored in the database. Variants will not be stored".format(samplename))
     else :
+        print("INFO: Annotating, filtering and storing {}".format(samplename))
         # Guardar una nueva muestra
         dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="MDSvar")
         with dbcon as con :

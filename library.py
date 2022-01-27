@@ -157,14 +157,14 @@ def anotarVariante(varFile) :
     anno = "/opt/annovar20200607/table_annovar.pl {input} /home/ffuster/share/biodata/Indexes/ANNOVAR/humandb -buildver hg19 -out {dir}/raw -remove --protocol refGene,avsnp150,1000g2015aug_all,1000g2015aug_afr,1000g2015aug_amr,1000g2015aug_eas,1000g2015aug_eur,1000g2015aug_sas,exac03,gnomad211_exome,gnomad211_genome,esp6500siv2_all,esp6500siv2_ea,esp6500siv2_aa,clinvar_20190305,cosmic70,dbnsfp35a --operation g,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f,f --nastring NA --otherinfo".format(dir = vDir, input = av)
     if not os.path.isfile(av) :
         args = shlex.split(conv)
-        p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+        p = subprocess.Popen(args, stderr = subprocess.PIPE, stdout = subprocess.PIPE)
         out, err = p.communicate()
         if p.returncode != 0 :
             print("ERROR: While executing ANNOVAR. Check below possible errors. Command executed:\n{}".format(anno))
             sys.exit(1)
     if not os.path.isfile(txt) :
         args = shlex.split(anno)
-        p = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+        p = subprocess.Popen(args, stderr = subprocess.PIPE, stdout = subprocess.PIPE)
         out, err = p.communicate()
         if p.returncode != 0 :
             print("ERROR: While executing ANNOVAR. Check below possible errors. Command executed:\n{}".format(anno))
