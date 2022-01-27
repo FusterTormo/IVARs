@@ -68,8 +68,6 @@ pop_keys = ["1000g2015aug_all", "1000g2015aug_afr", "1000g2015aug_amr", "1000g20
 pred_keys = ["SIFT_pred", "Polyphen2_HDIV_pred", "Polyphen2_HVAR_pred", "LRT_pred", "MutationTaster_pred", "MutationAssessor_pred", "FATHMM_pred", "PROVEAN_pred",
 "MetaSVM_pred", "MetaLR_pred", "DANN_score"]
 
-
-
 def fillALLdb(filename) :
     header = []
     mostra = ""
