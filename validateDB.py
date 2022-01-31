@@ -66,8 +66,8 @@ if os.path.isdir(path) :
                             print("WARNING: Variants in gene {} are different. Found in database {}, in file {}".format(k, res, v))
                             different = True
 
-                        if not different :
-                            print("OK")
+            if not different :
+                print("OK")
 
 
 else :
