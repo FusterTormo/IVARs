@@ -57,10 +57,11 @@ if os.path.isdir(path) :
                     if int(res) != total :
                         print("WARNING: Total variants stored are different: {} found in database, {} found in file".format(res, total))
                     for k,v in genes.items() :
-                        sql = "SELECT count(*) FROM run WHERE id_mostra='{samp}' AND id_variant IN (SELECT id FROM variant WHERE gen='{gen}')".format(samp = muestra, gen = g)
+                        sql = "SELECT count(*) FROM run WHERE id_mostra='{samp}' AND id_variant IN (SELECT id FROM variant WHERE gen='{gen}')".format(samp = muestra, gen = k)
                         cur.execute(sql)
-                        print(sql)
-                        print(cur.fetchone()[0])
+                        res = cur.fetchone()[0]
+                        if int(res) != v :
+                            print("WARNING: Variants in gene {} are different. Found in database {}, in file {}".format(k, res, v))
 
 
 
