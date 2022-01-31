@@ -13,7 +13,7 @@ Validar que las variantes introducidas en la base de datos son las mismas que ha
 path = input("INPUT: Folder you want to validate: ")
 if os.path.isdir(path) :
     # Buscar cuantas muestras hay en la carpeta que se ha introducido
-    cmd = "find {} -name raw.hg19_mutianno.txt"
+    cmd = "find {} -name raw.hg19_mutianno.txt".format(path)
     args = shlex.split(cmd)
     p = subprocess.Popen(args, stderr = subprocess.PIPE, stdout = subprocess.PIPE)
     out, err = p.communicate()
