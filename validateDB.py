@@ -36,6 +36,7 @@ if os.path.isdir(path) :
             # Contar el numero de genes distintos con variante que tiene la muestra (en la clave del diccionario)
             # Contar el numero de variantes que tiene cada gen en cada muestra (el contenido del diccionario)
             genes = {}
+            different = False
             cmd = "cut -f 7 {}".format(a)
             args = shlex.split(cmd)
             p = subprocess.Popen(args, stdout = subprocess.PIPE)
@@ -56,13 +57,17 @@ if os.path.isdir(path) :
                     res = cur.fetchone()[0]
                     if int(res) != total :
                         print("WARNING: Total variants stored are different: {} found in database, {} found in file".format(res, total))
+                        different = True
                     for k,v in genes.items() :
                         sql = "SELECT count(*) FROM run WHERE id_mostra='{samp}' AND id_variant IN (SELECT id FROM variant WHERE gen='{gen}')".format(samp = muestra, gen = k)
                         cur.execute(sql)
                         res = cur.fetchone()[0]
                         if int(res) != v :
                             print("WARNING: Variants in gene {} are different. Found in database {}, in file {}".format(k, res, v))
+                            different = True
 
+                        if not different :
+                            print("OK")
 
 
 else :
