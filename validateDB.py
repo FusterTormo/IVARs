@@ -10,7 +10,14 @@ import sys
 """
 Validar que las variantes introducidas en la base de datos son las mismas que hay en los archivos originales
 """
-path = input("INPUT: Folder you want to validate: ")
+path = ""
+if len(sys.argv) > 1 :
+    if os.path.isdir(sys.argv[1]) :
+        path = sys.argv[1]
+
+if path == "" :
+    path = input("INPUT: Folder you want to validate: ")
+    
 if os.path.isdir(path) :
     # Buscar cuantas muestras hay en la carpeta que se ha introducido
     cmd = "find {} -name raw.hg19_multianno.txt".format(path)
