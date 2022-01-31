@@ -48,14 +48,19 @@ if os.path.isdir(path) :
                         genes[b] = 1
             # Comprobar si en la base de datos los numeros son iguales. Imprimir si hay algo que no cuadra
             print("INFO: Comparing the information obtained with the stored in the database")
-            sql = "SELECT count(*) FROM run WHERE id_mostra='{}'".format(sample)
+            sql = "SELECT count(*) FROM run WHERE id_mostra='{}'".format(muestra)
             dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database="MDSvar")
             with dbcon as con:
                 with con.cursor() as cur :
                     cur.execute(sql)
-                    res = cur.fetchall()
-                    print(sql)
-                    print(res)
+                    res = cur.fetchone()[0]
+                    if int(res) != total :
+                        print("WARNING: Total variants stored are different: {} found in database, {} found in file".format(res, total))
+                    for k,v in genes.items() :
+                        sql = "SELECT count(*) FROM run WHERE id_mostra='{samp}' AND id_variant IN (SELECT id FROM variant WHERE gen='{gen}')".format(samp = muestra, gen = g)
+                        cur.execute(sql)
+                        print(sql)
+                        print(cur.fetchone()[0])
 
 
 
