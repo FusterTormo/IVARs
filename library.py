@@ -5,6 +5,7 @@ import mysql.connector
 import os
 import shlex
 import subprocess
+import sys
 
 """
 CONSTANTES
@@ -284,8 +285,8 @@ def saveInDB(variant, dbName) :
     # Comprobar si la variante se ha guardado previamente en la base de datos. Recoger el identificador de la variante
     dbcon = mysql.connector.connect(host="localhost", user="ffuster", password="Aetaeb6e", database=dbName)
     with dbcon as con :
-        query = "SELECT id FROM variant WHERE cromosoma='{chr}' AND inicio={sta} AND observado='{alt}' AND genoma_ref='{gref}'".format(
-        chr = variant["chr"], sta = variant["start"], alt = variant["alt"], gref = variant["refGen"])
+        query = "SELECT id FROM variant WHERE cromosoma='{chr}' AND inicio={sta} AND referencia='{ref}' AND observado='{alt}' AND genoma_ref='{gref}'".format(
+        chr = variant["chr"], sta = variant["start"], ref = variant["ref"], alt = variant["alt"], gref = variant["refGen"])
         qvar = "INSERT INTO variant(cromosoma,inicio,fin,referencia,observado,genoma_ref,gen,tipo_var,tipo_ex,transcrito,hgvs_cDNA,hgvs_prot,exon,dbsnp,clinvar,cosmic,sum_pred,maf,pop_maf) "
         with con.cursor() as cur :
             cur.execute(query)
